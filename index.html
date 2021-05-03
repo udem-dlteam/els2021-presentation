@@ -1,0 +1,489 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+        <title>A Scheme Foreign Function Interface to JavaScript Based on an Infix Extension</title>
+
+        <!-- Reveal.js -->
+        <link rel="stylesheet" href="css/reset.css">
+        <link rel="stylesheet" href="css/reveal.css">
+        <link rel="stylesheet" href="css/theme/serif.css" id="theme">
+        <link rel="stylesheet" href="css/monokai.css" id="highlight-theme">
+
+        <!-- Gambit -->
+        <link rel="stylesheet" href="css/codemirror.css">
+        <link rel="stylesheet" href="css/UI.css">
+        <script src="js/browserfs.min.js"></script>
+        <script src="js/codemirror.js"></script>
+        <script src="js/scheme.js"></script>
+        <script src="js/matchbrackets.js"></script>
+        <script src="js/emacs.js"></script>
+        <script src="js/math.js"></script>
+        <script src="js/UI.js"></script>
+        <script src="js/VM.min.js"></script>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+        <script src="https://jvectormap.com/js/jquery-jvectormap-2.0.5.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jvectormap/2.0.5/jquery-jvectormap.min.js" integrity="sha512-GJa/LjpGK81b9EeizDHN9K25l9H6bDAz2v4Ga6FnkFjNlAMVtMh6RbeAdUH94qY3KlggKGi9YfCkwGptnjjDkA==" crossorigin="anonymous"></script>
+        <script src="https://jvectormap.com/js/jquery-jvectormap-world-mill.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jvectormap/2.0.5/jquery-jvectormap.css" integrity="sha512-1ZwE8kCr0CknYsK+JYHqxnFqCZ2c17AJ6uTVf6me8UFCZJPE12ujWxnspvRJUb/zciTQ2D58PkJHQk5PLSYJ4Q==" crossorigin="anonymous" />
+
+        <style type="text/css">
+         .reveal img {
+             max-height: calc(0.8 * var(--slide-height));
+             max-width: calc(0.8 * var (--slide-width));
+         }
+
+         ._ui {
+             font-size: 50%;
+         }
+
+         .console pre {
+             box-shadow: none;
+         }
+
+         ._ui pre {
+             box-shadow: none;
+         }
+
+         .g-console {
+             display: flex;
+             flex-direction: column;
+             height: calc(0.6 * var(--slide-height));
+             max-height: calc(0.6 * var(--slide-height));
+             min-height: calc(0.6 * var(--slide-height));
+         }
+
+         .console .CodeMirror-scroll {
+             max-height: calc(0.7*var(--slide-height));
+         }
+        </style>
+    </head>
+    <body>
+        <div class="reveal">
+            <div class="slides">
+                <section id="title">
+                    <h1 class="r-fit-text">A Scheme Foreign Function Interface</h1>
+                    <h1 class="r-fit-text">to JavaScript Based on an Infix Extension</h1>
+                    <p>Marc-André Bélanger</p>
+                    <p>Marc Feeley</p>
+                    <p>Presented at ELS 2021</p>
+                    <a href="https://zenodo.org/record/4711424">https://zenodo.org/record/4711424</a>
+                    <p>Built with <a href="https://github.com/gambit/gambit">Gambit Scheme</a> and <a href="https://revealjs.com">RevealJS</a>.</p>
+                </section>
+
+                <section id="overview">
+                    <h2>Overview</h2>
+                    <ol>
+                        <li><a href="#/console">Motivation</a></li>
+                        <li><a href="#/goals">Goals</a></li>
+                        <li><a href="#/quick-demo">Quick demo</a></li>
+                        <li><a href="#/syntax">Syntax</a></li>
+                        <li><a href="#/implementation">Implementation</a></li>
+                        <li><a href="#/examples">Examples</a></li>
+                        <li><a href="#/related-work">Related work</a></li>
+                    </ol>
+                </section>
+
+                <section id="console">
+                    <h3>Gambit Scheme</h3>
+                    <a href="https://gambitscheme.org/try">https://gambitscheme.org/try</a>
+                    <br />
+                    <button onclick="toggleConsole(0)">Back</button>
+                    <div id="ex-dom"></div>
+                    <div class="g-console">
+                        <div id="ui-00">
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Foreign Function Interface (FFI)</h3>
+                    <img src="img/ffi.png" alt="Foreign Function Interface" />
+                </section>
+
+                <section>
+                    <h3>Calling C from Gambit</h3>
+                    <pre><code class="scheme" data-trim data-noescape>
+(c-declare "#include &ltmath.h&gt")
+
+(define ldexp (c-lambda (double int) double "ldexp"))
+                    </code></pre>
+                    <p>The FFI is implementation specific, idiosyncratic.</p>
+                </section>
+                <section>
+                    <h3>Calling C from Gambit</h3>
+                    <pre><code class="scheme" data-trim data-noescape>
+
+(c-declare #&lt&ltc-declare-end
+
+typedef char EBCDIC; /* EBCDIC encoded characters */
+
+void put_char (EBCDIC c) { ... } /* EBCDIC I/O functions */
+EBCDIC get_char (void) { ... }
+
+char EBCDIC_to_ISO_8859_1[256] = { ... }; /* conversion tables */
+char ISO_8859_1_to_EBCDIC[256] = { ... };
+
+___SCMOBJ SCMOBJ_to_EBCDIC (___SCMOBJ src, EBCDIC *dst)
+{
+  int x = ___INT(src); /* convert from Scheme character to int */
+  if (x > 255) return ___FIX(___UNKNOWN_ERR);
+  *dst = ISO_8859_1_to_EBCDIC[x];
+  return ___FIX(___NO_ERR);
+}
+
+#define ___BEGIN_CFUN_SCMOBJ_to_EBCDIC(src,dst,i) \
+if ((___err = SCMOBJ_to_EBCDIC (src, &dst)) == ___FIX(___NO_ERR)) {
+#define ___END_CFUN_SCMOBJ_to_EBCDIC(src,dst,i) }
+
+#define ___BEGIN_CFUN_EBCDIC_to_SCMOBJ(src,dst) \
+{ dst = ___CHR(EBCDIC_to_ISO_8859_1[src]);
+#define ___END_CFUN_EBCDIC_to_SCMOBJ(src,dst) }
+
+#define ___BEGIN_SFUN_EBCDIC_to_SCMOBJ(src,dst,i) \
+{ dst = ___CHR(EBCDIC_to_ISO_8859_1[src]);
+#define ___END_SFUN_EBCDIC_to_SCMOBJ(src,dst,i) }
+
+#define ___BEGIN_SFUN_SCMOBJ_to_EBCDIC(src,dst) \
+{ ___err = SCMOBJ_to_EBCDIC (src, &dst);
+#define ___END_SFUN_SCMOBJ_to_EBCDIC(src,dst) }
+
+c-declare-end
+)
+
+(c-define-type EBCDIC "EBCDIC" "EBCDIC_to_SCMOBJ" "SCMOBJ_to_EBCDIC" #f)
+
+(define put-char (c-lambda (EBCDIC) void "put_char"))
+(define get-char (c-lambda () EBCDIC "get_char"))
+
+(c-define (write-EBCDIC c) (EBCDIC) void "write_EBCDIC" ""
+  (write-char c))
+
+(c-define (read-EBCDIC) () EBCDIC "read_EBCDIC" ""
+  (read-char))
+                    </pre></code>
+                    <p>The FFI is implementation specific, idiosyncratic.</p>
+                </section>
+
+                <section id="goals">
+                    <h2>Goals</h2>
+                    <ul>
+                        <li><strong>Natural syntax</strong>: stay close to JavaScript</li>
+                        <li><strong>Expressions as interface</strong>: avoid cumbersome DSL, let eval do the work</li>
+                        <li><strong>Avoid type annotations</strong>: automatic conversions</li>
+                        <li><strong>Use from REPL</strong>: avoid compilation</li>
+                    </ul>
+                </section>
+
+                <section id="quick-demo">
+                    <h2>Quick demo</h2>
+                    <pre style="display: none;"><code class="scheme" id="code-02" data-trim data-noescape>
+(define (hello name)
+  \alert("Hello, "+(`name)+"!"))
+
+(define (set-bg-color color)
+  \document.body.style.background=`color)
+                    </code></pre>
+                    <div class="_ui" id="ui-01"></div>
+                </section>
+
+                <section id="syntax">
+                    <h2>Syntax</h2>
+                </section>
+                <section>
+                    <h3>Bridging the syntactic gap</h3>
+                    <ul>
+                        <li>JavaScript has an infix syntax</li>
+                        <pre><code class="javascript" data-trim data-noescape>
+function foo(x) {
+    return x;
+}
+                        </code></pre>
+                        <li>Scheme has a prefix syntax</li>
+                        <pre><code class="scheme" data-trim data-noescape>
+(define (foo x) x)
+                        </code></pre>
+                        <li>Scheme Infix eXtension</li>
+                        <p>Gambit has a reader extension to parse an infix language</p>
+                    </ul>
+                </section>
+
+                <section>
+                    <h3>Scheme Infix eXtension (SIX)</h3>
+                    <img src="img/syntax.png" alt="Scheme Infix eXtension syntax" />
+                </section>
+
+                <section>
+                    <h3>Scheme Infix eXtension (SIX)</h3>
+                    <p>Interfacing to pure JavaScript</p>
+                    <pre style="display: none;"><code class="scheme" data-trim data-noescape>
+(* (+ 1 2) \3+4 (+ 5 6))
+
+(string-append \"a" "b" \"c")
+
+\alert("ELS 2021")
+
+\document.body.style.background="blue"
+
+(define add1 \function(x) { return x+1; })
+                    </code></pre>
+                    <div class="_ui" id="ui-02"></div>
+                </section>
+
+                <section>
+                    <h3>Scheme Infix eXtension (SIX)</h3>
+                    <p>Mixing JavaScript and Scheme expressions</p>
+                    <pre style="display: none;"><code class="scheme" data-trim data-noescape>
+\1+`(* 2 3)
+
+\1+`var
+
+(string-append "now: " \ new Date().toString())
+
+(+ 1 2 \3*4*(`5) 6 7)
+
+\Math.sqrt(`9)-3
+
+(let ((x 10)) \Math.sqrt(1/`x))
+                    </code></pre>
+                    <div class="_ui" id="ui-03"></div>
+                </section>
+
+                <section>
+                    <h3>Scheme Infix eXtension (SIX)</h3>
+                    <p>Resolving identifier ambiguities</p>
+                    <pre style="display: none;"><code class="scheme" data-trim data-noescape>
+(define number-of-items 100)
+
+\10*`number-of-items
+
+\`number-of-items*10
+
+\(`number-of-items)*10
+                    </code></pre>
+                    <div class="_ui" id="ui-04"></div>
+                </section>
+
+                <section id="implementation">
+                    <h2>Implementation</h2>
+                    <ul>
+                        <li>Universal Backend (GVM)</li>
+                        <li>Reader (SIX)</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h3>GVM representation of types</h3>
+                    <img src="img/figure_1.png" alt="Figure 1: GVM’s representation of the Scheme types in JavaScript"/>
+                </section>
+
+                <section>
+                    <h3>Bridging the semantic gap</h3>
+                    <p>The <code>\</code> reader macro constructs an AST from a SIX expression</>
+                    <pre style="display: none;"><code class="scheme" data-trim data-noencode>
+'\2*`v[i+1]
+
+(six.infix
+  (six.x*y
+    (six.literal 2)
+    (six.index
+      (quasiquote v)
+      (six.x+y
+        (six.identifier i)
+        (six.literal 1)))))
+                    </code></pre>
+                    <div class="_ui" id="ui-05"></div>
+                </section>
+
+                <section>
+                    <h3>Bridging the semantic gap</h3>
+                    <h4>The <code>six.infix</code> macro</h4>
+                    <ul>
+                        <li>Creates a string of the JavaScript code wrapped in a function so that it can be passed to the JavaScript eval</li>
+                        <li>One Scheme parameter per <code>`</code> expression, eval'd, converted and passed</li>
+                        <li>Performs type conversions</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h3>FFI mapping of types</h3>
+                    <div style="display: flex; flex-direction: row;">
+                        <img style="display: flex; width:60%;" src="img/figure_2.png" alt="Figure 2: FFI mapping of types between Scheme and JavaScript" />
+                        <div style="margin-left: 10px; display: flex; flex-direction: column">
+                            <p style="margin-bottom: 0;display: flex">Pass-through types</p>
+                            <pre style="display: flex; width: 100%;"><code style="width: 100%" class="scheme" data-trim data-noescape>
+(scheme val) ---> _Scheme object
+foreign(val) ---> _Foreign object
+                            </code></pre>
+                            <div style="display: flex; width: 100%;" class="_ui" id="ui-06"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h3 class="r-fit-text">Converting procedures and functions</h3>
+                    <ul>
+                        <li style="margin-bottom: 20px;">
+                            Transparent conversion
+                            <ul>
+                                <li>Scheme procedures mapped to JS async functions</li>
+                                <li>Results are Promises</li>
+                            </ul>
+                        </li>
+                        <li style="margin-bottom: 20px;"><strong>Scheme to JS call</strong>: add Scheme callback for Promise resolution, Scheme thread waits until callback is called</li>
+                        <li><strong>JS to Scheme call</strong>: create a promise, put promise, procedure and parameters in a “callback queue” managed by a Scheme thread, when Scheme call is done the promise is resolved with the result</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h3 class="r-fit-text">Function memoization through self-modifying code</h3>
+                    <pre style="display: none;"><code class="text" data-trim data-noescape>
+(define (add1 x) \(`x)+1)
+                    </code></pre>
+                    <div class="_ui" id="ui-07"></div>
+                </section>
+
+                <section>
+                    <h3>Accessing Scheme Object Representation</h3>
+                    <pre style="display: none;"><code id="code-06" data-trim data-noescape>
+(define num 1+2i)
+(println \(`num).scmobj.imag)
+\(`num).scmobj.imag=9
+(println num)
+                    </code></pre>
+                    <div class="_ui" id="ui-08"></div>
+                </section>
+
+                <section id="examples">
+                    <h2>Examples</h2>
+                </section>
+
+                <section>
+                    <h3>Green threads</h3>
+                    <div style="overflow: scroll; max-height: calc(0.8*var(--slide-height));" id="threads"></div>
+                    <pre style="display: none;" onclick="runCode('ex-threads')"><code class="scheme" id="ex-threads" data-tim data-noescape>
+(define-syntax future
+  (lambda (stx)
+    (syntax-case stx ()
+      ((future expr)
+       #'(thread (lambda () expr))))))
+
+(define touch thread-join!)
+
+(define (pmap f lst)
+  ;; "parallel" map
+  (map touch (map (lambda (x) (future (f x))) lst)))
+
+(define memo
+  (string-append
+   "Scheme_-_An_interpreter_for_extended_"
+   "lambda_calculus.djvu"))
+
+(define (page n)
+  (string-append
+   "https://upload.wikimedia.org/wikipedia"
+   "/commons/thumb/1/1e/" memo
+   "/page" (number->string n) "-593px-" memo ".jpg"))
+
+(define (fetch-blob url)
+  \fetch(`url).then(function (r) { return r.blob(); }))
+
+(define (->URL blob)
+  \URL.createObjectURL(`blob))
+
+(define (show url)
+  \document.getElementById("threads").insertAdjacentHTML(
+    "beforeend",
+    "&ltimg src='"+(`url)+"' width=200px&gt"))
+
+(define (images)
+  (pmap (lambda (n) (-&gtURL (fetch-blob (page n))))
+        (iota 43 1)))
+
+;(for-each show (images))
+                    </code></pre>
+                    <div class="_ui" id="ui-09"></div>
+                </section>
+
+                <section>
+                    <h3>Plotting the ISS position</h3>
+                    <div id="world-map" style="display: none;"></div>
+                    <pre style="display: none;"><code id="ex-iss" class="scheme" data-trim data-noescape>
+(define (fetch-json url)
+  \fetch(`url).then(function (r) { return r.json(); }))
+
+(define url "http://api.open-notify.org/iss-now.json")
+
+(define (add-marker p)
+  (let loop ()
+    (let* ((json (fetch-json url))
+           (lat  (string->number \(`json).iss_position.latitude))
+           (lon  (string->number \(`json).iss_position.longitude))
+           (marker (list->table `(("latLng" ,lat ,lon)))))
+      \iss_markers.push(`marker)
+      \map.addMarker(iss_markers.length, `marker)
+      (thread-sleep! p)
+      (loop))))
+
+(define (update-iss-position p)
+  (thread (lambda () (add-marker p))))
+
+(define (start)
+  \document.getElementById("ui-10").style.display="none"
+  \showMap()
+  (thread-sleep! 2)
+  (update-iss-position 5))
+                    </code></pre>
+                    <div class="_ui" id="ui-10"></div>
+                </section>
+
+                <section id="related-work">
+                    <h2>Related work</h2>
+                    <ul>
+                        <li><b>Code as string:</b> GHCJS
+                            <p><small><code>foreign import javascript "console.log($1)" f :: Double->IO()</code></small></p>
+                            <li><b>Dot Notation:</b> JScheme, LIPS</li>
+                            <p><small><code>(.println System.out$ "hello")</code>&nbsp;&nbsp;&rarr;&nbsp;&nbsp;<code>System.out.println("hello")</code></small></p>
+                            <li><b>Racket:</b> Set syntax of file (<code>#lang</code>) or single form:
+                                <p><small><code>(+ 1 #reader"js.rkt"Math.sqrt(2) 3)</code></small></p>
+                            </li>
+                        </li>
+                    </ul>
+                </section>
+
+            </div>
+        </div>
+
+        <script src="js/reveal.js"></script>
+        <script src="js/notes.js"></script>
+        <script src="js/markdown.js"></script>
+        <script src="js/highlight.js"></script>
+        <script src="js/setup.js"></script>
+
+        <script type="text/javascript">
+         var sections = document.getElementsByTagName("section");
+         sections.forEach((e) => { e.setAttribute("data-transition", "none"); });
+
+         var map = {};
+         var iss_markers = [];
+         function showMap() {
+             document.getElementById("world-map").style="display: block; margin: 20px auto; width: 600px; height: 400px";
+             map = new jvm.Map({
+                 container: $('#world-map'),
+                 map: 'world_mill',
+                 markerStyle: {
+                     initial: {
+                         fill: '#F8E23B',
+                         stroke: '#383f47'
+                     }
+                 },
+                 markers: iss_markers
+             });
+         }
+        </script>
+
+
+    </body>
+</html>
